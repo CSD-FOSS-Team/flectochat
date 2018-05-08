@@ -4,6 +4,7 @@ from threading import Thread
 import socket
 
 from flectochat.comm import Communication
+from flectochat.util import address_to_tuple, tuple_to_address
 
 
 class Master(Thread):
@@ -37,23 +38,32 @@ class Master(Thread):
             if command.startswith("send "):
                 _, message = command.split(" ", 1)
 
-                for i in self.handler.clients:
-                    if i.is_live():
-                        i.send(message)
+                self.handler.send_all(message)
 
             if command.startswith("connect "):
                 _, location = command.split(" ", 1)
 
-                try:
-                    # connect to others
-                    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    client.connect((socket.gethostname(), int(location)))
-                    print("Listener: Client accepted: {0}".format(client))
-                    self.handler.create_client(client)
-                except:
-                    print("Failed to connect")
+                if ":" in location:
+                    address = address_to_tuple(location)
+                else:
+                    address = ("127.0.1.1", int(location))
+
+                if self.handler.has_client(tuple_to_address(address)):
+                    print("Already connected")
+                else:
+                    try:
+                        # connect to others
+                        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        client.connect(address)
+                        print("Listener: Client accepted: {0}".format(client))
+                        self.handler.create_client(client)
+                    except:
+                        print("Failed to connect")
 
             elif command == "exit":
+
+                self.handler.send_all("bye")
+
                 break
             else:
                 pass
@@ -101,6 +111,17 @@ class Handler(Thread):
 
     def remove_client(self, client):
         self.clients.remove(client)
+
+    def has_client(self, address):
+        for i in self.clients:
+            if i.name == address:
+                return True
+        return False
+
+    def send_all(self, message):
+        for i in self.clients:
+            if i.is_live():
+                i.send(message)
 
     def stop(self):
         self.live = False
