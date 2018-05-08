@@ -1,13 +1,15 @@
 
 from threading import Thread
 
+from flectochat.util import socket_address
+
 
 class Communication:
     """A basic socket communication wrapper with an internal thread"""
 
     def __init__(self, socket):
         self.socket = socket
-        self.name = socket.getpeername()[0] + ':' + str(socket.getpeername()[1])
+        self.name = socket_address(socket)
         self.live = True
         self.handler = Communication.Handler(self)
         self.handler.start()
