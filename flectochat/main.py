@@ -3,82 +3,126 @@ from time import sleep
 from threading import Thread
 import socket
 
+from flectochat.comm import Communication
+
+
+class Master(Thread):
+
+    def __init__(self):
+        super().__init__()
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # try ports from 8181 to 8199
+        for port in range(8181, 8200):
+            try:
+                s.bind((socket.gethostname(), port))
+                break
+            except:
+                pass
+
+        print("Bound to {0}".format(s))
+
+        self.handler = Handler()
+        self.listener = Listener(s, self.handler)
+
+    def run(self):
+
+        self.handler.start()
+        self.listener.start()
+
+        while True:
+
+            command = input(">> ")
+
+            if command.startswith("send "):
+                _, message = command.split(" ", 1)
+
+                for i in self.handler.clients:
+                    if i.is_live():
+                        i.send(message)
+
+            if command.startswith("connect "):
+                _, location = command.split(" ", 1)
+
+                try:
+                    # connect to others
+                    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    client.connect((socket.gethostname(), int(location)))
+                    print("Listener: Client accepted: {0}".format(client))
+                    self.handler.create_client(client)
+                except:
+                    print("Failed to connect")
+
+            elif command == "exit":
+                break
+            else:
+                pass
+
+        self.listener.stop()
+        self.handler.stop()
+
 
 class Listener(Thread):
 
     def __init__(self, server_socket, client_handler):
-        super().__init__(daemon=True)
+        super().__init__()
+        self.live = True
         self.socket = server_socket
         self.handler = client_handler
 
+    def stop(self):
+        self.live = False
+        self.socket.close()
+
     def run(self):
+        self.socket.settimeout(1)
         self.socket.listen()
 
-        while True:
+        while self.live:
 
-            client_socket, client_addr = self.socket.accept()
-            print("Listener: Client accepted: {0}".format(client_socket))
-            self.handler.create_client(client_socket)
-            sleep(1)
+            try:
+                client_socket, client_addr = self.socket.accept()
+                print("Listener: Client accepted: {0}".format(client_socket))
+                self.handler.create_client(client_socket)
+            except:
+                pass
 
 
 class Handler(Thread):
 
     def __init__(self):
         super().__init__()
+        self.live = True
         self.clients = []
 
     def create_client(self, client_socket):
         c = Client(client_socket, self)
-        c.start()
         self.clients.append(c)
 
     def remove_client(self, client):
         self.clients.remove(client)
 
-    def run(self):
-        while True:
+    def stop(self):
+        self.live = False
 
+    def run(self):
+        while self.live:
             sleep(1)
 
+        for i in self.clients:
+            if i.is_live():
+                i.stop()
 
-class Client(Thread):
 
-    def __init__(self, socket, handler):
-        super().__init__(daemon=True)
-        self.socket = socket
-        self.handler = handler
-        self.name = socket.getpeername()[0] + ':' + str(socket.getpeername()[1])
+class Client(Communication):
 
-    def run(self):
-        data = ""
+    def __init__(self, socket, parent):
+        super().__init__(socket)
+        self.parent = parent
 
-        while True:
+    def on_receive(self, message):
+        print("{0} >> msg >> {1}".format(self.name, message))
 
-            packet = self.socket.recv(1024)
-
-            if len(packet) > 0:
-                data += packet.decode('UTF-8')
-            else:
-                break
-
-            while '\n' in data:
-                message, data = data.split('\n', 1)
-                print("{0} >> msg >> {1}".format(self.name, message))
-
+    def on_stop(self):
         print("{0} >> end".format(self.name))
-        handler.remove_client(self)
-
-
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind((socket.gethostname(), 8181))
-
-handler = Handler()
-listener = Listener(s, handler)
-
-handler.start()
-listener.start()
-
-input("")
-s.close()
-print("The end")
+        self.parent.remove_client(self)
