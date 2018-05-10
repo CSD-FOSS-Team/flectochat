@@ -4,8 +4,11 @@ from threading import Thread
 import socket
 
 from flectochat.comm import Communication
-from flectochat.util import address_to_tuple, tuple_to_address
+from flectochat.util import address_to_tuple, tuple_to_address, socket_address
 
+def cprint(*args):
+    print("\r", end="")
+    print(*args)
 
 class Master(Thread):
 
@@ -21,7 +24,7 @@ class Master(Thread):
             except:
                 pass
 
-        print("Bound to {0}".format(s))
+        cprint("Bound to {0}".format(tuple_to_address(s.getsockname())))
 
         self.handler = Handler()
         self.listener = Listener(s, self.handler)
@@ -49,16 +52,16 @@ class Master(Thread):
                     address = ("127.0.1.1", int(location))
 
                 if self.handler.has_client(tuple_to_address(address)):
-                    print("Already connected")
+                    cprint("Already connected")
                 else:
                     try:
                         # connect to others
                         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                         client.connect(address)
-                        print("Listener: Client accepted: {0}".format(client))
+                        cprint("Listener: Client accepted: {0}".format(socket_address(client)))
                         self.handler.create_client(client)
                     except:
-                        print("Failed to connect")
+                        cprint("Failed to connect")
 
             elif command == "exit":
 
@@ -92,7 +95,7 @@ class Listener(Thread):
 
             try:
                 client_socket, client_addr = self.socket.accept()
-                print("Listener: Client accepted: {0}".format(client_socket))
+                cprint("Listener: Client accepted: {0}".format(socket_address(client_socket)))
                 self.handler.create_client(client_socket)
             except:
                 pass
@@ -142,8 +145,8 @@ class Client(Communication):
         self.parent = parent
 
     def on_receive(self, message):
-        print("{0} >> msg >> {1}".format(self.name, message))
+        cprint("{0} >> msg >> {1}".format(self.name, message))
 
     def on_stop(self):
-        print("{0} >> end".format(self.name))
+        cprint("{0} >> end".format(self.name))
         self.parent.remove_client(self)

@@ -43,7 +43,10 @@ class Communication:
 
             while self.comm.live:
 
-                packet = self.comm.socket.recv(1024)
+                try:
+                    packet = self.comm.socket.recv(1024)
+                except:
+                    break
 
                 if len(packet) > 0:
                     data += packet.decode('UTF-8')
@@ -54,4 +57,5 @@ class Communication:
                     message, data = data.split('\n', 1)
                     self.comm.on_receive(message)
 
+            self.comm.live = False
             self.comm.on_stop()
